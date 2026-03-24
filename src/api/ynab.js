@@ -1,0 +1,115 @@
+import { YNAB_API_BASE, YNAB_ACCOUNTS } from '../shared/constants';
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
+
+async function ynabFetch(endpoint, token, retries = 0) {
+  try {
+    const res = await fetch(`${YNAB_API_BASE}${endpoint}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (res.status === 401) {
+      throw new Error('Invalid YNAB token. Check your personal access token in Settings.');
+    }
+
+    if (res.status === 429) {
+      if (retries < MAX_RETRIES) {
+        const delay = RETRY_DELAY_MS * Math.pow(2, retries);
+        await new Promise((r) => setTimeout(r, delay));
+        return ynabFetch(endpoint, token, retries + 1);
+      }
+      throw new Error('YNAB API rate limit reached. Try again in a few minutes.');
+    }
+
+    if (!res.ok) {
+      throw new Error(`YNAB API error: ${res.status} ${res.statusText}`);
+    }
+
+    return await res.json();
+  } catch (err) {
+    if (err.message.includes('YNAB')) throw err;
+    if (retries < MAX_RETRIES) {
+      const delay = RETRY_DELAY_MS * Math.pow(2, retries);
+      await new Promise((r) => setTimeout(r, delay));
+      return ynabFetch(endpoint, token, retries + 1);
+    }
+    throw new Error('Unable to reach YNAB. Check your internet connection.');
+  }
+}
+
+export async function fetchBudgets(token) {
+  const data = await ynabFetch('/budgets', token);
+  return data.data.budgets;
+}
+
+export async function fetchBudgetId(token) {
+  const budgets = await fetchBudgets(token);
+  if (budgets.length === 0) throw new Error('No budgets found in your YNAB account.');
+  return budgets[0].id;
+}
+
+export async function fetchTransactions(token, budgetId, sinceDate) {
+  const since = sinceDate ? `?since_date=${sinceDate}` : '';
+  const data = await ynabFetch(`/budgets/${budgetId}/transactions${since}`, token);
+  return data.data.transactions.map((t) => ({
+    id: t.id,
+    date: t.date,
+    payee: t.payee_name || '',
+    amount: t.amount, // milliunits
+    category: t.category_name || 'Uncategorized',
+    categoryId: t.category_id,
+    accountId: t.account_id,
+    accountName: t.account_name || '',
+    memo: t.memo,
+    cleared: t.cleared,
+    approved: t.approved,
+  }));
+}
+
+export async function fetchAccounts(token, budgetId) {
+  const data = await ynabFetch(`/budgets/${budgetId}/accounts`, token);
+  return data.data.accounts.map((a) => ({
+    id: a.id,
+    name: a.name,
+    type: a.type,
+    balance: a.balance, // milliunits
+    clearedBalance: a.cleared_balance,
+    onBudget: a.on_budget,
+    closed: a.closed,
+  }));
+}
+
+export async function fetchScheduledTransactions(token, budgetId) {
+  const data = await ynabFetch(`/budgets/${budgetId}/scheduled_transactions`, token);
+  return data.data.scheduled_transactions.map((t) => ({
+    id: t.id,
+    dateNext: t.date_next,
+    frequency: t.frequency,
+    payee: t.payee_name || '',
+    amount: t.amount,
+    category: t.category_name || '',
+    accountId: t.account_id,
+    memo: t.memo,
+  }));
+}
+
+export async function fetchCategories(token, budgetId) {
+  const data = await ynabFetch(`/budgets/${budgetId}/categories`, token);
+  return data.data.category_groups.flatMap((g) =>
+    g.categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      group: g.name,
+      budgeted: c.budgeted,
+      activity: c.activity,
+      balance: c.balance,
+    }))
+  );
+}
+
+export function getBofAPayments(transactions) {
+  return transactions.filter(
+    (t) => t.accountId === YNAB_ACCOUNTS.BOFA_CASH_REWARDS && t.amount < 0
+  );
+}
