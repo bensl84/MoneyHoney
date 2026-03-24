@@ -74,8 +74,9 @@ export default function App() {
   }, []);
 
   // Fetch data when token is available
-  const refreshData = useCallback(async () => {
-    if (!ynabToken) return;
+  const refreshData = useCallback(async (tokenOverride) => {
+    const token = tokenOverride || ynabToken;
+    if (!token) return;
 
     setLoading(true);
     setError(null);
@@ -84,7 +85,7 @@ export default function App() {
       // Get or fetch budget ID
       let bid = budgetId;
       if (!bid) {
-        bid = await fetchBudgetId(ynabToken);
+        bid = await fetchBudgetId(token);
         setBudgetId(bid);
         if (window.electronStore) {
           await window.electronStore.set('ynabBudgetId', bid);
@@ -94,9 +95,9 @@ export default function App() {
       // Fetch all data in parallel
       const sinceDate = get90DaysAgo();
       const [txns, scheduled, accts] = await Promise.all([
-        fetchTransactions(ynabToken, bid, sinceDate),
-        fetchScheduledTransactions(ynabToken, bid),
-        fetchAccounts(ynabToken, bid),
+        fetchTransactions(token, bid, sinceDate),
+        fetchScheduledTransactions(token, bid),
+        fetchAccounts(token, bid),
       ]);
 
       // Categorize transactions
@@ -176,12 +177,13 @@ export default function App() {
     }
   }, [ynabToken, budgetId, anthropicKey, goals, baselines]);
 
-  // Auto-refresh on token set
+  // Auto-refresh on app load when token exists
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally excludes refreshData to avoid infinite loop
   useEffect(() => {
-    if (ynabToken && !loading) {
-      refreshData();
+    if (ynabToken && !loading && transactions.length === 0) {
+      refreshData(ynabToken);
     }
-  }, [ynabToken]);
+  }, [ynabToken, loading]);
 
   const handleSaveSettings = async (newToken, newApiKey, newGoals) => {
     if (window.electronStore) {
@@ -192,6 +194,12 @@ export default function App() {
     if (newToken !== undefined) setYnabToken(newToken);
     if (newApiKey !== undefined) setAnthropicKey(newApiKey);
     if (newGoals !== undefined) setGoals(newGoals);
+
+    // Immediately fetch data with the new token
+    if (newToken && newToken !== ynabToken) {
+      setActiveTab('overview');
+      refreshData(newToken);
+    }
   };
 
   const handleBaselinesUpdate = (newBaselines) => {

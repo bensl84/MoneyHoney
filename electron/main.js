@@ -59,12 +59,23 @@ function createWindow() {
   mainWindow.setMenuBarVisibility(false);
 }
 
-// IPC Handlers
+// IPC Handlers — key allowlist for security
+const ALLOWED_STORE_KEYS = [
+  'ynabToken', 'anthropicApiKey', 'ynabBudgetId',
+  'goals', 'baseline', 'statementHistory', 'cache',
+];
+
 ipcMain.handle('store:get', (_event, key) => {
+  if (!ALLOWED_STORE_KEYS.some((k) => key === k || key.startsWith(k + '.'))) {
+    return undefined;
+  }
   return store.get(key);
 });
 
 ipcMain.handle('store:set', (_event, key, value) => {
+  if (!ALLOWED_STORE_KEYS.some((k) => key === k || key.startsWith(k + '.'))) {
+    return { success: false, error: 'Invalid key' };
+  }
   store.set(key, value);
   return { success: true };
 });
@@ -86,6 +97,9 @@ ipcMain.handle('dialog:openFile', async (_event, filters) => {
 
 ipcMain.handle('pdf:parse', async (_event, filePath) => {
   try {
+    if (!filePath || !filePath.toLowerCase().endsWith('.pdf')) {
+      return { success: false, error: 'Only PDF files are allowed' };
+    }
     const fs = require('fs');
     const pdfParse = require('pdf-parse');
     const dataBuffer = fs.readFileSync(filePath);
@@ -93,6 +107,32 @@ ipcMain.handle('pdf:parse', async (_event, filePath) => {
     return { success: true, text: data.text, pages: data.numpages };
   } catch (err) {
     return { success: false, error: err.message };
+  }
+});
+
+// API proxy — YNAB and Claude APIs don't allow browser CORS, so we proxy through main process
+const ALLOWED_API_ORIGINS = ['https://api.ynab.com', 'https://api.anthropic.com'];
+
+ipcMain.handle('api:fetch', async (_event, url, options) => {
+  try {
+    if (!ALLOWED_API_ORIGINS.some((origin) => url.startsWith(origin))) {
+      return { ok: false, status: 403, statusText: 'URL not in allowlist', data: null };
+    }
+    const res = await fetch(url, {
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      body: options.body || undefined,
+    });
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+    return { ok: res.ok, status: res.status, statusText: res.statusText, data };
+  } catch (err) {
+    return { ok: false, status: 0, statusText: err.message, data: null };
   }
 });
 

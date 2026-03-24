@@ -43,6 +43,9 @@ export default function Leakage({ leakageReport, goals }) {
 
       {/* Category bars */}
       <div className="space-y-3">
+        {(!leakageReport || leakageReport.length === 0) && (
+          <p className="text-sm text-gray-500 text-center py-4">No leakage data yet. Connect YNAB and refresh to load data.</p>
+        )}
         {leakageReport?.map((cat) => (
           <CategoryBar
             key={cat.category}

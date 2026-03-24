@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { getUpcomingBills, generateAllocation, buildPaydayContext } from '../engine/payday';
 import { buildGoalContext, generateAllocation as aiGenerateAllocation } from '../api/claude';
 
@@ -8,14 +8,14 @@ export default function Payday({ payday, scheduledTxns, mtd, goals, anthropicKey
   const [aiLoading, setAiLoading] = useState(false);
   const [manualAmount, setManualAmount] = useState('');
 
-  const bills = getUpcomingBills(scheduledTxns || []);
+  const bills = useMemo(() => getUpcomingBills(scheduledTxns || []), [scheduledTxns]);
 
   useEffect(() => {
     if (payday) {
       const alloc = generateAllocation(payday.amount, bills, {}, goals);
       setAllocation(alloc);
     }
-  }, [payday, scheduledTxns, goals]);
+  }, [payday, bills, goals]);
 
   const handleManualAllocate = () => {
     const amount = parseFloat(manualAmount);
@@ -29,12 +29,17 @@ export default function Payday({ payday, scheduledTxns, mtd, goals, anthropicKey
     if (!anthropicKey || !allocation) return;
     setAiLoading(true);
 
-    const payInfo = payday || { amount: parseFloat(manualAmount), date: new Date().toISOString().split('T')[0] };
-    const goalCtx = buildGoalContext(goals, leakageReport, bofaData);
-    const paydayCtx = buildPaydayContext(payInfo, bills, mtd, goals);
-    const result = await aiGenerateAllocation(anthropicKey, goalCtx, paydayCtx);
-    setAiAllocation(result);
-    setAiLoading(false);
+    try {
+      const payInfo = payday || { amount: parseFloat(manualAmount), date: new Date().toISOString().split('T')[0] };
+      const goalCtx = buildGoalContext(goals, leakageReport, bofaData);
+      const paydayCtx = buildPaydayContext(payInfo, bills, mtd, goals);
+      const result = await aiGenerateAllocation(anthropicKey, goalCtx, paydayCtx);
+      setAiAllocation(result);
+    } catch (err) {
+      setAiAllocation(`Error getting AI recommendation: ${err.message}`);
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const categoryColors = {

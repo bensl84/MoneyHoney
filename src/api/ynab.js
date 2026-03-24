@@ -4,13 +4,39 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
 async function ynabFetch(endpoint, token, retries = 0) {
+  const url = `${YNAB_API_BASE}${endpoint}`;
+  const options = {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  };
+
   try {
-    const res = await fetch(`${YNAB_API_BASE}${endpoint}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    let res;
+
+    // Use Electron's main process proxy to avoid CORS issues
+    if (window.electronAPI) {
+      res = await window.electronAPI.fetch(url, options);
+    } else {
+      // Fallback for browser dev (won't work due to CORS but useful for testing)
+      const fetchRes = await fetch(url, { headers: options.headers });
+      res = {
+        ok: fetchRes.ok,
+        status: fetchRes.status,
+        statusText: fetchRes.statusText,
+        data: await fetchRes.json(),
+      };
+    }
 
     if (res.status === 401) {
       throw new Error('Invalid YNAB token. Check your personal access token in Settings.');
+    }
+
+    if (res.status === 403) {
+      throw new Error('YNAB token lacks permissions. Re-create your token in YNAB settings.');
+    }
+
+    if (res.status === 404) {
+      throw new Error('YNAB resource not found. Your budget ID may be incorrect.');
     }
 
     if (res.status === 429) {
@@ -26,9 +52,11 @@ async function ynabFetch(endpoint, token, retries = 0) {
       throw new Error(`YNAB API error: ${res.status} ${res.statusText}`);
     }
 
-    return await res.json();
+    return res.data;
   } catch (err) {
-    if (err.message.includes('YNAB')) throw err;
+    if (err.message.includes('YNAB') || err.message.includes('Invalid') || err.message.includes('rate limit') || err.message.includes('lacks permissions') || err.message.includes('not found')) {
+      throw err;
+    }
     if (retries < MAX_RETRIES) {
       const delay = RETRY_DELAY_MS * Math.pow(2, retries);
       await new Promise((r) => setTimeout(r, delay));
@@ -110,6 +138,6 @@ export async function fetchCategories(token, budgetId) {
 
 export function getBofAPayments(transactions) {
   return transactions.filter(
-    (t) => t.accountId === YNAB_ACCOUNTS.BOFA_CASH_REWARDS && t.amount < 0
+    (t) => t.accountId === YNAB_ACCOUNTS.BOFA_CASH_REWARDS && t.amount > 0
   );
 }

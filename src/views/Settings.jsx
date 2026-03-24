@@ -260,7 +260,7 @@ export default function Settings({ ynabToken, anthropicKey, goals, baselines, on
             {Object.entries(baselines).map(([cat, avg]) => (
               <div key={cat} className="flex justify-between text-sm py-1">
                 <span className="text-gray-400">{cat}</span>
-                <span className="text-gray-300 font-mono">${avg.toFixed(0)}/mo</span>
+                <span className="text-gray-300 font-mono">${(Number(avg) || 0).toFixed(0)}/mo</span>
               </div>
             ))}
           </div>

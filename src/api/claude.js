@@ -81,31 +81,49 @@ async function callClaude(apiKey, systemPrompt, userPrompt, retries = 0) {
     return 'AI brief unavailable — add your Anthropic API key in Settings.';
   }
 
+  const url = 'https://api.anthropic.com/v1/messages';
+  const fetchOptions = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 300,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+    }),
+  };
+
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 300,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    });
+    let res;
+
+    if (window.electronAPI) {
+      res = await window.electronAPI.fetch(url, fetchOptions);
+    } else {
+      const fetchRes = await fetch(url, {
+        ...fetchOptions,
+        headers: { ...fetchOptions.headers, 'anthropic-dangerous-direct-browser-access': 'true' },
+      });
+      res = { ok: fetchRes.ok, status: fetchRes.status, data: await fetchRes.json() };
+    }
 
     if (!res.ok) {
       if (res.status === 401) {
         return 'AI brief unavailable — invalid Anthropic API key. Check Settings.';
       }
+      if (res.status === 400 || res.status === 403) {
+        return `AI brief unavailable — Claude API error ${res.status}.`;
+      }
       throw new Error(`Claude API error: ${res.status}`);
     }
 
-    const data = await res.json();
+    const data = res.data;
+    if (!data?.content?.[0]?.text) {
+      return 'AI brief unavailable — unexpected response from Claude API.';
+    }
     return data.content[0].text;
   } catch (err) {
     if (err.message.includes('unavailable') || err.message.includes('invalid')) {

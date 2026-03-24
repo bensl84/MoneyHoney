@@ -21,7 +21,7 @@ export default function BofA({ bofaData, goals, onUpdateBalance }) {
     );
   }
 
-  const { currentBalance, velocity, mtdPayments, projections } = bofaData;
+  const { currentBalance = 0, velocity = 0, mtdPayments = 0, projections = {} } = bofaData;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -90,7 +90,7 @@ export default function BofA({ bofaData, goals, onUpdateBalance }) {
           <div className="w-full bg-surface-3 rounded-full h-3">
             <div
               className="h-full rounded-full bg-gradient-to-r from-red-500 via-amber-500 to-emerald-500 transition-all duration-1000"
-              style={{ width: `${Math.max(5, 100 - (currentBalance / 13500) * 100)}%` }}
+              style={{ width: `${Math.max(5, Math.min(100, 100 - (currentBalance / (goals?.bofaOriginalBalance || 13500)) * 100))}%` }}
             />
           </div>
           <div className="flex justify-between mt-1">
@@ -116,25 +116,25 @@ export default function BofA({ bofaData, goals, onUpdateBalance }) {
         />
         <StatCard
           label="Payoff Date"
-          value={projections.currentPace.date}
-          sublabel={`${projections.currentPace.months} months`}
+          value={projections?.currentPace?.date ?? '—'}
+          sublabel={`${projections?.currentPace?.months ?? '—'} months`}
           color="honey"
         />
         <StatCard
           label="If Leakage = $0"
-          value={projections.zeroLeakage.date}
-          sublabel={`${projections.monthsSaved} months sooner`}
+          value={projections?.zeroLeakage?.date ?? '—'}
+          sublabel={`${projections?.monthsSaved ?? 0} months sooner`}
           color="green"
         />
       </div>
 
       {/* Motivation box */}
-      {projections.monthsSaved > 0 && (
+      {(projections?.monthsSaved ?? 0) > 0 && (
         <div className="bg-honey-900/20 border border-honey-700/30 rounded-xl p-5">
           <p className="text-honey-300">
             Eliminating leakage would pay off BofA <strong>{projections.monthsSaved} months sooner</strong>.
-            That's <strong>{projections.zeroLeakage.date}</strong> instead of{' '}
-            <strong>{projections.currentPace.date}</strong>.
+            That's <strong>{projections?.zeroLeakage?.date ?? '—'}</strong> instead of{' '}
+            <strong>{projections?.currentPace?.date ?? '—'}</strong>.
           </p>
         </div>
       )}
@@ -150,7 +150,7 @@ export default function BofA({ bofaData, goals, onUpdateBalance }) {
               <div key={i} className="flex justify-between text-sm py-1">
                 <span className="text-gray-400 font-mono">{txn.date}</span>
                 <span className="text-emerald-400 font-mono">
-                  ${Math.abs(txn.amount / 1000).toFixed(2)}
+                  ${Math.abs((txn.amount ?? 0) / 1000).toFixed(2)}
                 </span>
               </div>
             ))}

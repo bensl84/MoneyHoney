@@ -9,7 +9,7 @@ export default function Transactions({ transactions }) {
     let txns = [...(transactions || [])];
 
     // Sort by date descending
-    txns.sort((a, b) => b.date.localeCompare(a.date));
+    txns.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
     // Apply filter
     switch (filter) {

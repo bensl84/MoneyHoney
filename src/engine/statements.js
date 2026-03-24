@@ -141,21 +141,28 @@ function computeSimilarity(a, b) {
   if (a === b) return 1;
 
   const bigrams = (str) => {
-    const set = new Set();
+    const arr = [];
     for (let i = 0; i < str.length - 1; i++) {
-      set.add(str.substring(i, i + 2));
+      arr.push(str.substring(i, i + 2));
     }
-    return set;
+    return arr;
   };
 
   const aBigrams = bigrams(a);
   const bBigrams = bigrams(b);
+  const bCounts = {};
+  for (const bg of bBigrams) {
+    bCounts[bg] = (bCounts[bg] || 0) + 1;
+  }
   let matches = 0;
   for (const bg of aBigrams) {
-    if (bBigrams.has(bg)) matches++;
+    if (bCounts[bg] > 0) {
+      matches++;
+      bCounts[bg]--;
+    }
   }
 
-  return (2 * matches) / (aBigrams.size + bBigrams.size);
+  return (2 * matches) / (aBigrams.length + bBigrams.length);
 }
 
 /**

@@ -3,7 +3,7 @@ import StatCard from '../components/StatCard';
 
 export default function Overview({ mtd, leakageReport, bofaData, aiBrief, briefLoading, onRefresh }) {
   const totalLeakage = leakageReport?.reduce((sum, c) => sum + c.mtdSpend, 0) || 0;
-  const projectedMonthEnd = mtd
+  const projectedMonthEnd = mtd && mtd.dayOfMonth > 0
     ? Math.round((mtd.totalSpend / mtd.dayOfMonth) * mtd.daysInMonth)
     : 0;
 
@@ -76,6 +76,9 @@ export default function Overview({ mtd, leakageReport, bofaData, aiBrief, briefL
           Leakage Snapshot
         </h3>
         <div className="grid grid-cols-2 gap-3">
+          {(!leakageReport || leakageReport.length === 0) && (
+            <p className="text-sm text-gray-500 col-span-2">No leakage data yet. Refresh to load.</p>
+          )}
           {leakageReport?.map((cat) => {
             const colorClass = cat.color === 'red' ? 'text-red-400' : cat.color === 'amber' ? 'text-amber-400' : 'text-emerald-400';
             return (
@@ -83,9 +86,9 @@ export default function Overview({ mtd, leakageReport, bofaData, aiBrief, briefL
                 <span className="text-sm text-gray-300">{cat.category}</span>
                 <div className="flex items-center gap-3">
                   <span className={`font-mono text-sm font-medium ${colorClass}`}>
-                    ${cat.mtdSpend.toFixed(0)}
+                    ${(cat.mtdSpend ?? 0).toFixed(0)}
                   </span>
-                  <span className="text-xs text-gray-500">/ ${cat.baseline.toFixed(0)}</span>
+                  <span className="text-xs text-gray-500">/ ${(cat.baseline ?? 0).toFixed(0)}</span>
                 </div>
               </div>
             );
@@ -102,19 +105,19 @@ export default function Overview({ mtd, leakageReport, bofaData, aiBrief, briefL
           <div className="flex items-center gap-8">
             <div>
               <span className="text-xs text-gray-500">MTD Payments</span>
-              <p className="text-lg font-mono text-emerald-400">${bofaData.mtdPayments.toFixed(0)}</p>
+              <p className="text-lg font-mono text-emerald-400">${(bofaData.mtdPayments ?? 0).toFixed(0)}</p>
             </div>
             <div>
               <span className="text-xs text-gray-500">Monthly Velocity</span>
-              <p className="text-lg font-mono text-gray-200">${bofaData.velocity.toFixed(0)}/mo</p>
+              <p className="text-lg font-mono text-gray-200">${(bofaData.velocity ?? 0).toFixed(0)}/mo</p>
             </div>
             <div>
               <span className="text-xs text-gray-500">Payoff at Current Pace</span>
-              <p className="text-lg font-mono text-honey-400">{bofaData.projections.currentPace.date}</p>
+              <p className="text-lg font-mono text-honey-400">{bofaData.projections?.currentPace?.date ?? '—'}</p>
             </div>
             <div>
               <span className="text-xs text-gray-500">If Leakage = $0</span>
-              <p className="text-lg font-mono text-emerald-400">{bofaData.projections.zeroLeakage.date}</p>
+              <p className="text-lg font-mono text-emerald-400">{bofaData.projections?.zeroLeakage?.date ?? '—'}</p>
             </div>
           </div>
         </div>

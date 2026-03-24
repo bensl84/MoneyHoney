@@ -13,3 +13,7 @@ contextBridge.exposeInMainWorld('electronPDF', {
 contextBridge.exposeInMainWorld('electronDialog', {
   openFile: (filters) => ipcRenderer.invoke('dialog:openFile', filters),
 });
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  fetch: (url, options) => ipcRenderer.invoke('api:fetch', url, options || {}),
+});

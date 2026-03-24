@@ -1,7 +1,7 @@
 import React from 'react';
 
 export default function TransactionRow({ transaction }) {
-  const amount = transaction.amount / 1000;
+  const amount = (transaction.amount ?? 0) / 1000;
   const isInflow = amount > 0;
 
   const leakageBadge = transaction.leakageCategory ? (
@@ -21,7 +21,7 @@ export default function TransactionRow({ transaction }) {
             {transaction.payee || 'Unknown'}
           </span>
           <span className="text-xs text-gray-500 truncate">
-            {transaction.category}
+            {transaction.category || 'Uncategorized'}
           </span>
         </div>
         {leakageBadge}

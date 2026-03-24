@@ -127,7 +127,9 @@ export function generateAllocation(paycheckAmount, bills, estimates = {}, goals 
     bofaExtra,
     totalAllocated: Math.round(totalAllocated * 100) / 100,
     billsTotal: bills.reduce((sum, b) => sum + b.amount, 0),
-    variableTotal: variableItems.reduce((sum, v) => sum + Math.min(v.amount, paycheckAmount), 0),
+    variableTotal: items
+      .filter((item) => item.category === 'variable')
+      .reduce((sum, item) => sum + item.amount, 0),
   };
 }
 

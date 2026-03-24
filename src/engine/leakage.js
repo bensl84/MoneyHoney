@@ -46,6 +46,7 @@ export function computeBaseline(historicalTxns, months = BASELINE_MONTHS) {
 
   for (const txn of historicalTxns) {
     if (!txn.leakageCategory) continue;
+    if (txn.amount >= 0) continue; // Skip inflows (refunds, returns)
     const monthKey = txn.date.substring(0, 7); // YYYY-MM
     if (!monthlyTotals[monthKey]) monthlyTotals[monthKey] = {};
     if (!monthlyTotals[monthKey][txn.leakageCategory]) {
@@ -137,7 +138,9 @@ export function calculateBofAProjections(currentBalance, monthlyVelocity, monthl
       months: isFinite(monthsZeroLeakage) ? monthsZeroLeakage : Infinity,
       date: formatDate(payoffZeroLeak),
     },
-    monthsSaved: monthsCurrentPace - monthsZeroLeakage,
+    monthsSaved: isFinite(monthsCurrentPace) && isFinite(monthsZeroLeakage)
+      ? monthsCurrentPace - monthsZeroLeakage
+      : 0,
   };
 }
 

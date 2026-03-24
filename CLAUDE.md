@@ -38,6 +38,8 @@ See `spec/architecture.md` for full structure. Key entry points:
 - **IDs**: All YNAB account/category IDs in `src/shared/constants.js`. Never hardcoded in components or engine.
 - **Errors**: Every API call and IPC channel wrapped in try/catch with user-facing messages. No silent failures.
 - **Security**: contextIsolation true, nodeIntegration false. API keys never in renderer. Main process only.
+- **API Proxy**: All external API calls (YNAB, Claude) go through `electronAPI.fetch()` IPC proxy in main process to avoid CORS. URL allowlist enforced.
+- **Store Security**: electron-store keys restricted to allowlist. No arbitrary read/write.
 
 ## The Two Goals (Always In Context)
 

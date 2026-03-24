@@ -20,9 +20,10 @@ export function categorizeTransaction(txn) {
       }
     }
 
-    // Check payee pattern match
+    // Check payee pattern match (word boundary to avoid false positives like "bar" in "barbershop")
     for (const pattern of config.payeePatterns) {
-      if (payeeLower.includes(pattern)) {
+      const regex = new RegExp(`\\b${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+      if (regex.test(payeeLower)) {
         return {
           ...txn,
           leakageCategory: catName,

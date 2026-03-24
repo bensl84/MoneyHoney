@@ -8,7 +8,7 @@ export default function CategoryBar({ category, mtdSpend, baseline, delta, bofaI
   };
 
   const config = colorConfig[color] || colorConfig.green;
-  const progress = baseline > 0 ? Math.min((mtdSpend / baseline) * 100, 150) : 0;
+  const progress = baseline > 0 ? Math.min((mtdSpend / baseline) * 100, 150) : (mtdSpend > 0 ? 100 : 0);
 
   return (
     <div className="bg-surface-2 rounded-lg p-4 border border-surface-3">
