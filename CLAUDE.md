@@ -10,7 +10,10 @@ CTO, principal engineer, and product architect for MoneyHoney. You handle planni
 
 - **Tests**: 47/47 passing (vitest)
 - **Audit Fixes**: 30 fixes shipped across CORS, security, engine accuracy, and UI resilience
-- **Tasks**: All 8 Phase 1 tasks complete
+- **Tasks**: All 8 Phase 1 tasks complete + Nikki's View, Ben's View, Bill Manager, caching
+- **Tabs**: 8 total (Overview, Nikki's View, Ben's View, Leakage, BofA, Payday, Transactions, Settings)
+- **Caching**: YNAB data cached to electron-store, skips API if same day
+- **Persistence**: nikkiBills and nikkiSimulation stored in electron-store
 - **Deployment**: Pushed to GitHub
 
 ## Build Commands
@@ -35,8 +38,12 @@ See `spec/architecture.md` for full structure. Key entry points:
 | `src/api/ynab.js` | YNAB API client — transaction fetching |
 | `src/api/claude.js` | Claude API client — AI analysis with goal context injection |
 | `src/engine/*` | Pure data processing — no UI, no side effects |
-| `src/views/*` | React views — one per tab |
-| `src/shared/constants.js` | Account IDs, category IDs, thresholds, config |
+| `src/engine/simulation.js` | 12-month cash flow simulation (26 biweekly periods) |
+| `src/views/*` | React views — one per tab (8 total) |
+| `src/views/Budget.jsx` | Nikki's View — simulation + Manage Bills toggle |
+| `src/views/BensView.jsx` | Ben's View — simple monthly budget |
+| `src/components/BillManager.jsx` | Add/remove/edit bills, dates, goals (persistent) |
+| `src/shared/constants.js` | Account IDs, category IDs, thresholds, BUDGET_DATA defaults |
 
 ## Key Conventions
 
