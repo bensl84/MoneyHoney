@@ -179,12 +179,54 @@ export default function App() {
     }
   }, [ynabToken, budgetId, anthropicKey, goals, baselines]);
 
-  // Auto-refresh on app load when token exists
+  // Load cached data instantly on startup, then fetch fresh in background
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally excludes refreshData to avoid infinite loop
   useEffect(() => {
-    if (ynabToken && !loading && transactions.length === 0) {
+    if (!ynabToken || loading) return;
+    if (transactions.length > 0) return; // Already loaded
+
+    (async () => {
+      // Step 1: Load cache instantly so the UI isn't empty
+      if (window.electronStore) {
+        try {
+          const cached = await window.electronStore.get('cache');
+          if (cached?.transactions?.length > 0) {
+            const categorized = cached.transactions.map(categorizeTransaction);
+            setTransactions(categorized);
+            const mtdData = calculateMTD(cached.transactions);
+            setMtd(mtdData);
+            const computedBaselines = computeBaseline(categorized);
+            const mergedBaselines = { ...baselines, ...computedBaselines };
+            setBaselines(mergedBaselines);
+            const leakage = calculateLeakage(mtdData.leakageByCategory, mergedBaselines);
+            setLeakageReport(leakage);
+
+            const bofaPayments = categorized.filter((t) => t.isBofAPayment);
+            const velocity = calculatePaydownVelocity(bofaPayments);
+            const totalLeakage = leakage.reduce((sum, c) => sum + c.bofaImpact, 0);
+            const currentBalance = goals?.bofaCurrentBalance || 13500;
+            const projections = calculateBofAProjections(currentBalance, velocity, totalLeakage);
+            setBofaData({
+              currentBalance, velocity, mtdPayments: mtdData.bofaPayments,
+              projections, recentPayments: bofaPayments.slice(0, 10),
+              monthsToPayoff: projections.currentPace.months,
+            });
+
+            // Check if cache is from today — if so, skip the fetch
+            const today = new Date().toISOString().split('T')[0];
+            if (cached.lastFetchDate === today) {
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (e) {
+          // Cache read failed, proceed to fresh fetch
+        }
+      }
+
+      // Step 2: Fetch fresh data (in background if cache was loaded)
       refreshData(ynabToken);
-    }
+    })();
   }, [ynabToken, loading]);
 
   const handleSaveSettings = async (newToken, newApiKey, newGoals) => {
