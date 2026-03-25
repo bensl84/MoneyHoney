@@ -63,7 +63,7 @@ function createWindow() {
 const ALLOWED_STORE_KEYS = [
   'ynabToken', 'anthropicApiKey', 'ynabBudgetId',
   'goals', 'baseline', 'statementHistory', 'cache',
-  'nikkiSimulation',
+  'nikkiSimulation', 'nikkiBills',
 ];
 
 ipcMain.handle('store:get', (_event, key) => {
