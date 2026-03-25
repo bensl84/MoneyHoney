@@ -1,7 +1,7 @@
 import { YNAB_API_BASE, YNAB_ACCOUNTS } from '../shared/constants';
 
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 1000;
+const MAX_RETRIES = 1;
+const RETRY_DELAY_MS = 2000;
 
 async function ynabFetch(endpoint, token, retries = 0) {
   const url = `${YNAB_API_BASE}${endpoint}`;
