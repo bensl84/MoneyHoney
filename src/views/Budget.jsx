@@ -1,436 +1,362 @@
 import { useState, useMemo } from 'react';
 import { BUDGET_DATA } from '../shared/constants';
+import { generateSimulation, groupByMonth } from '../engine/simulation';
 
-const fmt = (n) => '$' + (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-// Check if a bill is due this month
-function isDueThisMonth(dueMonths) {
-  if (!dueMonths || dueMonths.length === 0) return false;
-  const currentMonth = new Date().getMonth() + 1; // 1-12
-  return dueMonths.includes(currentMonth);
-}
+const fmt = (n) => '$' + Math.abs(n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtSigned = (n) => (n < 0 ? '−' : '') + fmt(n);
+const fmtDate = (d) => {
+  if (!d) return '';
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return `${days[d.getDay()]} ${d.getMonth() + 1}/${d.getDate()}`;
+};
 
 export default function Budget() {
   const defaults = BUDGET_DATA;
-  const currentMonth = new Date().getMonth() + 1;
-  const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  // Editable income
-  const [biweekly, setBiweekly] = useState(defaults.income.biweekly);
-  const monthly = biweekly * 2;
+  // Editable simulation inputs
+  const [startingBalance, setStartingBalance] = useState(2500);
+  const [paycheck, setPaycheck] = useState(defaults.income.biweekly);
+  const [spendPerPeriod, setSpendPerPeriod] = useState(defaults.spendTarget.foodAndFun / 2);
 
-  // Editable credit card payments
-  const [cardPayments, setCardPayments] = useState(
+  // Editable overrides — user can tweak any bill amount
+  const [cardOverrides, setCardOverrides] = useState(
     defaults.creditCards.map((c) => c.payment)
   );
-
-  // Editable monthly bill amounts
-  const [monthlyAmounts, setMonthlyAmounts] = useState(
+  const [monthlyOverrides, setMonthlyOverrides] = useState(
     defaults.monthlyBills.map((b) => b.amount)
   );
-
-  // Editable quarterly — default to full amount if due this month, 0 if not
-  const [quarterlyAmounts, setQuarterlyAmounts] = useState(
-    defaults.quarterlyBills.map((b) => isDueThisMonth(b.dueMonths) ? b.amount : 0)
+  const [quarterlyOverrides, setQuarterlyOverrides] = useState(
+    defaults.quarterlyBills.map((b) => b.amount)
+  );
+  const [yearlyOverrides, setYearlyOverrides] = useState(
+    defaults.yearlyBills.map((b) => b.amount)
   );
 
-  // Editable yearly — default to full amount if due this month, 0 if not
-  const [yearlyAmounts, setYearlyAmounts] = useState(
-    defaults.yearlyBills.map((b) => isDueThisMonth(b.dueMonths) ? b.amount : 0)
-  );
+  // Selected month for page view
+  const [selectedMonthIdx, setSelectedMonthIdx] = useState(0);
 
-  // Editable food & fun
-  const [foodAndFun, setFoodAndFun] = useState(defaults.spendTarget.foodAndFun);
+  // Generate simulation with overridden amounts
+  const simulation = useMemo(() => {
+    const creditCards = defaults.creditCards.map((c, i) => ({
+      ...c,
+      payment: cardOverrides[i],
+    }));
+    const monthlyBills = defaults.monthlyBills.map((b, i) => ({
+      ...b,
+      amount: monthlyOverrides[i],
+    }));
+    const quarterlyBills = defaults.quarterlyBills.map((b, i) => ({
+      ...b,
+      amount: quarterlyOverrides[i],
+    }));
+    const yearlyBills = defaults.yearlyBills.map((b, i) => ({
+      ...b,
+      amount: yearlyOverrides[i],
+    }));
 
-  // Totals
-  const cardPaymentsTotal = cardPayments.reduce((s, p) => s + p, 0);
-  const cardBalanceTotal = defaults.creditCards.reduce((s, c) => s + c.balance, 0);
-  const monthlyTotal = monthlyAmounts.reduce((s, a) => s + a, 0);
-  const quarterlyThisMonth = quarterlyAmounts.reduce((s, a) => s + a, 0);
-  const yearlyThisMonth = yearlyAmounts.reduce((s, a) => s + a, 0);
-
-  // "Between 2 Paydays" waterfall — everything divided by 2
-  const paycheck = biweekly;
-  const allBills = cardPaymentsTotal / 2 + monthlyTotal / 2 + quarterlyThisMonth / 2 + yearlyThisMonth / 2;
-  const leftover = paycheck - allBills;
-  const weeklySpend = foodAndFun / 2 / 2; // biweekly food&fun / 2 weeks
-
-  // Build unified bill list for the "Between 2 Paydays" running balance
-  const allItems = useMemo(() => {
-    const items = [];
-
-    // Credit cards (÷2)
-    defaults.creditCards.forEach((card, i) => {
-      items.push({
-        name: card.name,
-        dueDate: card.dueDate,
-        amount: cardPayments[i] / 2,
-        type: 'credit',
-        isDue: true,
-      });
+    return generateSimulation({
+      startingBalance,
+      paycheck,
+      creditCards,
+      monthlyBills,
+      quarterlyBills,
+      yearlyBills,
+      spendPerPeriod,
     });
+  }, [startingBalance, paycheck, spendPerPeriod, cardOverrides, monthlyOverrides, quarterlyOverrides, yearlyOverrides, defaults]);
 
-    // Monthly bills (÷2)
-    defaults.monthlyBills.forEach((bill, i) => {
-      items.push({
-        name: bill.name,
-        dueDate: bill.dueDate,
-        amount: monthlyAmounts[i] / 2,
-        type: 'monthly',
-        isDue: true,
-      });
+  const months = useMemo(() => groupByMonth(simulation), [simulation]);
+  const currentMonthData = months[selectedMonthIdx] || months[0];
+
+  // Find lowest balance across all periods
+  const lowestBalance = useMemo(() => {
+    let lowest = Infinity;
+    let lowestDate = null;
+    for (const period of simulation) {
+      for (const event of period.events) {
+        if (event.balance < lowest) {
+          lowest = event.balance;
+          lowestDate = event.date || period.payday;
+        }
+      }
+    }
+    return { amount: lowest, date: lowestDate };
+  }, [simulation]);
+
+  const updateOverride = (setter, idx, val) => {
+    setter((prev) => {
+      const next = [...prev];
+      next[idx] = parseFloat(val) || 0;
+      return next;
     });
-
-    // Quarterly bills (÷2, yellow if due this month)
-    defaults.quarterlyBills.forEach((bill, i) => {
-      const due = isDueThisMonth(bill.dueMonths);
-      items.push({
-        name: bill.name,
-        dueDate: bill.dueMonth,
-        amount: quarterlyAmounts[i] / 2,
-        type: 'quarterly',
-        isDue: due,
-        fullAmount: bill.amount,
-        nextDue: bill.dueMonths ? monthNames[bill.dueMonths.find((m) => m >= currentMonth) || bill.dueMonths[0]] : '',
-      });
-    });
-
-    // Yearly bills (÷2, yellow if due this month)
-    defaults.yearlyBills.forEach((bill, i) => {
-      const due = isDueThisMonth(bill.dueMonths);
-      items.push({
-        name: bill.name,
-        dueDate: bill.dueMonth,
-        amount: yearlyAmounts[i] / 2,
-        type: 'yearly',
-        isDue: due,
-        fullAmount: bill.amount,
-      });
-    });
-
-    return items;
-  }, [cardPayments, monthlyAmounts, quarterlyAmounts, yearlyAmounts, defaults, currentMonth]);
-
-  // Running balance for unified list
-  const runningBalance = useMemo(() => {
-    let remaining = paycheck;
-    return allItems.map((item) => {
-      remaining -= item.amount;
-      return remaining;
-    });
-  }, [paycheck, allItems]);
-
-  const updateCardPayment = (i, val) => {
-    const next = [...cardPayments];
-    next[i] = parseFloat(val) || 0;
-    setCardPayments(next);
-  };
-
-  const updateMonthlyAmount = (i, val) => {
-    const next = [...monthlyAmounts];
-    next[i] = parseFloat(val) || 0;
-    setMonthlyAmounts(next);
-  };
-
-  const updateQuarterlyAmount = (i, val) => {
-    const next = [...quarterlyAmounts];
-    next[i] = parseFloat(val) || 0;
-    setQuarterlyAmounts(next);
-  };
-
-  const updateYearlyAmount = (i, val) => {
-    const next = [...yearlyAmounts];
-    next[i] = parseFloat(val) || 0;
-    setYearlyAmounts(next);
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-honey-400">Nikki&apos;s View</h1>
-          <p className="text-sm text-gray-500 mt-1">Between 2 paydays &mdash; {monthNames[currentMonth]} {new Date().getFullYear()}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Biweekly Paycheck</p>
-          <div className="flex items-center gap-1 justify-end">
-            <span className="text-emerald-400 text-lg">$</span>
-            <input
-              type="number"
-              value={biweekly}
-              onChange={(e) => setBiweekly(parseFloat(e.target.value) || 0)}
-              className="w-24 bg-surface-3 border border-surface-4 rounded px-2 py-1 text-lg font-mono text-emerald-400 text-right focus:border-honey-500 focus:outline-none"
-            />
-          </div>
-          <p className="text-xs text-gray-500 mt-1">{fmt(monthly)} monthly</p>
+          <p className="text-sm text-gray-500 mt-1">12-month cash flow simulation &mdash; every payday, every bill, every dollar</p>
         </div>
       </div>
 
-      {/* Main layout: Between 2 Paydays (left) + Waterfall (right) */}
-      <div className="grid grid-cols-5 gap-4">
-
-        {/* Between 2 Paydays — unified editable bill list (3 cols wide) */}
-        <div className="col-span-3 bg-surface-2 rounded-xl p-5 border border-surface-3">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Between 2 Paydays</h2>
-            <div className="flex items-center gap-3 text-xs">
-              <span className="text-gray-500">Paycheck: <span className="font-mono text-emerald-400">{fmt(paycheck)}</span></span>
-            </div>
-          </div>
-
-          {/* Column headers */}
-          <div className="flex items-center justify-between pb-1 mb-1 border-b border-surface-4 text-xs text-gray-500 uppercase">
-            <span className="w-40">Bill</span>
-            <div className="flex items-center gap-2">
-              <span className="w-12 text-right">Due</span>
-              <span className="w-20 text-right">Amount (÷2)</span>
-              <span className="w-24 text-right">Remaining</span>
-            </div>
-          </div>
-
-          {/* Credit Cards section */}
-          <div className="mb-1">
-            <p className="text-xs text-gray-500 uppercase tracking-wider mt-2 mb-1 font-semibold">Credit Cards</p>
-            {defaults.creditCards.map((card, i) => (
-              <BillRow
-                key={'cc-' + card.name}
-                name={card.name}
-                dueDate={card.dueDate}
-                amount={cardPayments[i] / 2}
-                remaining={runningBalance[i]}
-                onAmountChange={(val) => updateCardPayment(i, val * 2)}
-                type="credit"
+      {/* Controls bar */}
+      <div className="bg-surface-2 rounded-xl p-4 border border-surface-3">
+        <div className="flex items-center gap-6 flex-wrap">
+          <div>
+            <label className="text-xs text-gray-500 uppercase block mb-1">Starting Balance</label>
+            <div className="flex items-center gap-1">
+              <span className="text-emerald-400 text-sm">$</span>
+              <input
+                type="number"
+                value={startingBalance}
+                onChange={(e) => setStartingBalance(parseFloat(e.target.value) || 0)}
+                className="w-24 bg-surface-3 border border-surface-4 rounded px-2 py-1 font-mono text-emerald-400 text-right text-sm focus:border-honey-500 focus:outline-none"
               />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 uppercase block mb-1">Paycheck (biweekly)</label>
+            <div className="flex items-center gap-1">
+              <span className="text-emerald-400 text-sm">$</span>
+              <input
+                type="number"
+                value={paycheck}
+                onChange={(e) => setPaycheck(parseFloat(e.target.value) || 0)}
+                className="w-24 bg-surface-3 border border-surface-4 rounded px-2 py-1 font-mono text-emerald-400 text-right text-sm focus:border-honey-500 focus:outline-none"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 uppercase block mb-1">Food & Fun (per check)</label>
+            <div className="flex items-center gap-1">
+              <span className="text-orange-400 text-sm">$</span>
+              <input
+                type="number"
+                value={spendPerPeriod}
+                onChange={(e) => setSpendPerPeriod(parseFloat(e.target.value) || 0)}
+                className="w-24 bg-surface-3 border border-surface-4 rounded px-2 py-1 font-mono text-orange-400 text-right text-sm focus:border-honey-500 focus:outline-none"
+              />
+            </div>
+          </div>
+          <div className="ml-auto text-right">
+            <p className="text-xs text-gray-500 uppercase">Lowest Balance</p>
+            <p className={`font-mono font-bold text-lg ${lowestBalance.amount >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
+              {lowestBalance.amount < 0 ? '−' : ''}{fmt(lowestBalance.amount)}
+            </p>
+            <p className="text-xs text-gray-500">{lowestBalance.date ? fmtDate(lowestBalance.date) : ''}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Month selector tabs */}
+      <div className="flex gap-1 overflow-x-auto pb-1">
+        {months.map((m, i) => {
+          const endBal = m.periods[m.periods.length - 1]?.endBalance ?? 0;
+          const isSelected = i === selectedMonthIdx;
+          return (
+            <button
+              key={m.key}
+              onClick={() => setSelectedMonthIdx(i)}
+              className={`shrink-0 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                isSelected
+                  ? 'bg-honey-600 text-white'
+                  : 'bg-surface-2 text-gray-400 hover:bg-surface-3 border border-surface-3'
+              }`}
+            >
+              <div>{m.label.split(' ')[0].substring(0, 3)}</div>
+              <div className={`font-mono text-xs mt-0.5 ${endBal >= 0 ? (isSelected ? 'text-white' : 'text-emerald-400') : 'text-red-400'}`}>
+                {endBal < 0 ? '−' : ''}{fmt(endBal)}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Main content: Simulation + Bill Editor */}
+      <div className="grid grid-cols-3 gap-4">
+
+        {/* Simulation timeline (2 cols) */}
+        <div className="col-span-2 space-y-3">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+            {currentMonthData?.label} — Pay Period Detail
+          </h2>
+
+          {currentMonthData?.periods.map((period) => (
+            <div key={period.index} className="bg-surface-2 rounded-xl border border-surface-3 overflow-hidden">
+              {/* Period header */}
+              <div className="bg-surface-3 px-4 py-2 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-honey-400 font-semibold text-sm">
+                    Payday: {fmtDate(period.payday)}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    — {fmtDate(period.periodEnd)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-xs">
+                  <span className="text-gray-500">End balance:</span>
+                  <span className={`font-mono font-bold ${period.endBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {period.endBalance < 0 ? '−' : ''}{fmt(period.endBalance)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Events table */}
+              <div className="px-4">
+                {/* Column headers */}
+                <div className="flex items-center py-1 border-b border-surface-4 text-xs text-gray-500 uppercase">
+                  <span className="w-8"></span>
+                  <span className="flex-1">Description</span>
+                  <span className="w-20 text-right">Date</span>
+                  <span className="w-24 text-right">Amount</span>
+                  <span className="w-28 text-right">Balance</span>
+                </div>
+
+                {period.events.map((event, ei) => {
+                  const isPayday = event.type === 'payday';
+                  const isSpend = event.type === 'spend';
+                  const isQuarterly = event.type === 'quarterly';
+                  const isYearly = event.type === 'yearly';
+                  const isDanger = event.balance < 0;
+                  const isWarning = event.balance >= 0 && event.balance < 500;
+
+                  let icon = '📋';
+                  if (isPayday) icon = '💰';
+                  else if (event.type === 'credit') icon = '💳';
+                  else if (isSpend) icon = '🛒';
+                  else if (isQuarterly) icon = '📅';
+                  else if (isYearly) icon = '📆';
+
+                  const rowBg = isPayday
+                    ? 'bg-emerald-950/30'
+                    : isDanger
+                      ? 'bg-red-950/30'
+                      : (isQuarterly || isYearly)
+                        ? 'bg-yellow-950/20'
+                        : '';
+
+                  return (
+                    <div key={ei} className={`flex items-center py-1.5 border-b border-surface-4/30 text-sm ${rowBg}`}>
+                      <span className="w-8 text-center text-xs">{icon}</span>
+                      <span className={`flex-1 ${isPayday ? 'text-emerald-400 font-semibold' : isSpend ? 'text-orange-400' : (isQuarterly || isYearly) ? 'text-yellow-300' : 'text-gray-300'}`}>
+                        {event.name}
+                        {(isQuarterly || isYearly) && <span className="text-yellow-500 text-xs ml-1">({event.type})</span>}
+                      </span>
+                      <span className="w-20 text-right text-xs text-gray-500">
+                        {event.date ? fmtDate(event.date) : ''}
+                      </span>
+                      <span className={`w-24 text-right font-mono text-xs ${event.amount >= 0 ? 'text-emerald-400' : 'text-gray-300'}`}>
+                        {event.amount >= 0 ? '+' : '−'}{fmt(event.amount)}
+                      </span>
+                      <span className={`w-28 text-right font-mono text-sm font-semibold ${isDanger ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-emerald-400'}`}>
+                        {event.balance < 0 ? '−' : ''}{fmt(event.balance)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Bill editor sidebar (1 col) */}
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Edit Bills</h2>
+
+          {/* Credit Cards */}
+          <div className="bg-surface-2 rounded-xl p-4 border border-surface-3">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Credit Cards</h3>
+            {defaults.creditCards.map((card, i) => (
+              <div key={card.name} className="flex items-center justify-between py-1 text-xs border-b border-surface-4/30">
+                <span className="text-gray-300 truncate mr-2">{card.name}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-gray-500">$</span>
+                  <input
+                    type="number"
+                    value={cardOverrides[i]}
+                    onChange={(e) => updateOverride(setCardOverrides, i, e.target.value)}
+                    className="w-16 bg-surface-3 border border-surface-4 rounded px-1 py-0.5 font-mono text-amber-400 text-right text-xs focus:border-honey-500 focus:outline-none"
+                    step="0.01"
+                  />
+                </div>
+              </div>
             ))}
           </div>
 
-          {/* Monthly Bills section */}
-          <div className="mb-1">
-            <p className="text-xs text-gray-500 uppercase tracking-wider mt-3 mb-1 font-semibold">Monthly Bills</p>
-            {defaults.monthlyBills.map((bill, i) => {
-              const idx = defaults.creditCards.length + i;
-              return (
-                <BillRow
-                  key={'mo-' + bill.name}
-                  name={bill.name}
-                  dueDate={bill.dueDate}
-                  amount={monthlyAmounts[i] / 2}
-                  remaining={runningBalance[idx]}
-                  onAmountChange={(val) => updateMonthlyAmount(i, val * 2)}
-                  type="monthly"
-                />
-              );
-            })}
-          </div>
-
-          {/* Quarterly section */}
-          <div className="mb-1">
-            <p className="text-xs text-gray-500 uppercase tracking-wider mt-3 mb-1 font-semibold">
-              Quarterly
-              {quarterlyThisMonth > 0 && <span className="text-yellow-400 ml-2 normal-case">({monthNames[currentMonth]} bills active)</span>}
-            </p>
-            {defaults.quarterlyBills.map((bill, i) => {
-              const idx = defaults.creditCards.length + defaults.monthlyBills.length + i;
-              const due = isDueThisMonth(bill.dueMonths);
-              return (
-                <BillRow
-                  key={'qt-' + bill.name}
-                  name={bill.name}
-                  dueDate={bill.dueMonth}
-                  amount={quarterlyAmounts[i] / 2}
-                  remaining={runningBalance[idx]}
-                  onAmountChange={(val) => updateQuarterlyAmount(i, val * 2)}
-                  type="quarterly"
-                  isDue={due}
-                  fullAmount={bill.amount}
-                />
-              );
-            })}
-          </div>
-
-          {/* Yearly section */}
-          <div className="mb-1">
-            <p className="text-xs text-gray-500 uppercase tracking-wider mt-3 mb-1 font-semibold">
-              Yearly
-              {yearlyThisMonth > 0 && <span className="text-yellow-400 ml-2 normal-case">({monthNames[currentMonth]} bills active)</span>}
-            </p>
-            {defaults.yearlyBills.map((bill, i) => {
-              const idx = defaults.creditCards.length + defaults.monthlyBills.length + defaults.quarterlyBills.length + i;
-              const due = isDueThisMonth(bill.dueMonths);
-              return (
-                <BillRow
-                  key={'yr-' + bill.name}
-                  name={bill.name}
-                  dueDate={bill.dueMonth}
-                  amount={yearlyAmounts[i] / 2}
-                  remaining={runningBalance[idx]}
-                  onAmountChange={(val) => updateYearlyAmount(i, val * 2)}
-                  type="yearly"
-                  isDue={due}
-                  fullAmount={bill.amount}
-                />
-              );
-            })}
-          </div>
-
-          {/* Totals */}
-          <div className="flex items-center justify-between mt-3 pt-3 border-t-2 border-surface-4">
-            <span className="font-semibold text-gray-300">Total Bills (per paycheck)</span>
-            <span className="font-mono font-semibold text-amber-400">{fmt(allBills)}</span>
-          </div>
-          <div className="flex items-center justify-between mt-2 pt-2 border-t-2 border-honey-600">
-            <span className="font-semibold text-honey-400 text-lg">Leftover</span>
-            <span className={`text-xl font-mono font-bold ${leftover >= 0 ? 'text-honey-400' : 'text-red-400'}`}>
-              {fmt(leftover)}
-            </span>
-          </div>
-        </div>
-
-        {/* Right side: Waterfall + Spend Target (2 cols wide) */}
-        <div className="col-span-2 space-y-4">
-          {/* Income Waterfall (monthly view) */}
-          <div className="bg-surface-2 rounded-xl p-5 border border-surface-3">
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Monthly Summary</h2>
-            <div className="flex items-center justify-between pb-1 mb-1 border-b border-surface-4 text-xs text-gray-500 uppercase">
-              <span></span>
-              <div className="flex items-center gap-3">
-                <span className="w-20 text-right">Per Check</span>
-                <span className="w-24 text-right">Monthly</span>
-              </div>
-            </div>
-            <WaterfallRow label="Income" perCheck={paycheck} monthly={monthly} isFirst />
-            <WaterfallRow label="Cards" perCheck={cardPaymentsTotal / 2} monthly={monthly - cardPaymentsTotal} />
-            <WaterfallRow label="Monthly" perCheck={monthlyTotal / 2} monthly={monthly - cardPaymentsTotal - monthlyTotal} />
-            <WaterfallRow label="Quarterly" perCheck={quarterlyThisMonth / 2} monthly={monthly - cardPaymentsTotal - monthlyTotal - quarterlyThisMonth} highlight={quarterlyThisMonth > 0} />
-            <WaterfallRow label="Yearly" perCheck={yearlyThisMonth / 2} monthly={monthly - cardPaymentsTotal - monthlyTotal - quarterlyThisMonth - yearlyThisMonth} highlight={yearlyThisMonth > 0} />
-            <div className="border-t-2 border-honey-600 pt-3 mt-2">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-honey-400">Leftover</span>
-                <div className="flex items-center gap-3">
-                  <span className={`font-mono font-bold w-20 text-right ${leftover >= 0 ? 'text-honey-400' : 'text-red-400'}`}>
-                    {fmt(leftover)}
-                  </span>
-                  <span className={`text-lg font-mono font-bold w-24 text-right ${leftover * 2 >= 0 ? 'text-honey-400' : 'text-red-400'}`}>
-                    {fmt(leftover * 2)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Spend Target */}
-          <div className="bg-surface-2 rounded-xl p-5 border border-surface-3">
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Spend Target</h2>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-orange-400">Food & Fun ({defaults.spendTarget.label})</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-orange-400 text-xs">$</span>
+          {/* Monthly Bills */}
+          <div className="bg-surface-2 rounded-xl p-4 border border-surface-3 max-h-64 overflow-y-auto">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Monthly Bills</h3>
+            {defaults.monthlyBills.map((bill, i) => (
+              <div key={bill.name} className="flex items-center justify-between py-1 text-xs border-b border-surface-4/30">
+                <span className="text-gray-300 truncate mr-2">{bill.name}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-gray-500">$</span>
                   <input
                     type="number"
-                    value={foodAndFun}
-                    onChange={(e) => setFoodAndFun(parseFloat(e.target.value) || 0)}
-                    className="w-20 bg-surface-3 border border-surface-4 rounded px-2 py-1 font-mono text-orange-400 text-right text-xs focus:border-honey-500 focus:outline-none"
+                    value={monthlyOverrides[i]}
+                    onChange={(e) => updateOverride(setMonthlyOverrides, i, e.target.value)}
+                    className="w-16 bg-surface-3 border border-surface-4 rounded px-1 py-0.5 font-mono text-gray-200 text-right text-xs focus:border-honey-500 focus:outline-none"
+                    step="0.01"
                   />
-                  <span className="text-xs text-gray-500">/mo</span>
                 </div>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-400">Per paycheck</span>
-                <span className="font-mono text-sm text-orange-400">{fmt(foodAndFun / 2)}</span>
+            ))}
+          </div>
+
+          {/* Quarterly Bills */}
+          <div className="bg-surface-2 rounded-xl p-4 border border-surface-3">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Quarterly Bills</h3>
+            {defaults.quarterlyBills.map((bill, i) => (
+              <div key={bill.name} className="flex items-center justify-between py-1 text-xs border-b border-surface-4/30">
+                <span className="text-yellow-300 truncate mr-2">{bill.name}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-gray-500">$</span>
+                  <input
+                    type="number"
+                    value={quarterlyOverrides[i]}
+                    onChange={(e) => updateOverride(setQuarterlyOverrides, i, e.target.value)}
+                    className="w-16 bg-surface-3 border border-yellow-800 rounded px-1 py-0.5 font-mono text-yellow-300 text-right text-xs focus:border-honey-500 focus:outline-none"
+                    step="0.01"
+                  />
+                </div>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-red-400">Weekly Max</span>
-                <span className="font-mono text-sm font-semibold text-red-400">{fmt(weeklySpend)}</span>
+            ))}
+            <p className="text-xs text-gray-600 mt-1 italic">Due months auto-detected</p>
+          </div>
+
+          {/* Yearly Bills */}
+          <div className="bg-surface-2 rounded-xl p-4 border border-surface-3">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Yearly Bills</h3>
+            {defaults.yearlyBills.map((bill, i) => (
+              <div key={bill.name} className="flex items-center justify-between py-1 text-xs border-b border-surface-4/30">
+                <span className="text-yellow-300 truncate mr-2">{bill.name}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-gray-500">$</span>
+                  <input
+                    type="number"
+                    value={yearlyOverrides[i]}
+                    onChange={(e) => updateOverride(setYearlyOverrides, i, e.target.value)}
+                    className="w-16 bg-surface-3 border border-yellow-800 rounded px-1 py-0.5 font-mono text-yellow-300 text-right text-xs focus:border-honey-500 focus:outline-none"
+                    step="0.01"
+                  />
+                </div>
               </div>
-              <div className="flex items-center justify-between pt-2 border-t border-surface-4">
-                <span className="text-xs text-gray-500">After food & fun (per check)</span>
-                <span className={`font-mono text-sm font-bold ${leftover - foodAndFun / 2 >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {fmt(leftover - foodAndFun / 2)}
-                </span>
-              </div>
-            </div>
+            ))}
           </div>
 
           {/* Goals */}
-          <div className="bg-surface-2 rounded-xl p-5 border border-surface-3">
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Goals</h2>
-            <div className="space-y-1">
-              {defaults.goals.map((goal, i) => (
-                <div key={i} className="flex items-start gap-2 text-sm py-0.5">
-                  <span className="text-honey-500 mt-0.5">•</span>
-                  <span className="text-gray-300 text-xs">{goal}</span>
-                </div>
-              ))}
-            </div>
+          <div className="bg-surface-2 rounded-xl p-4 border border-surface-3">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Goals</h3>
+            {defaults.goals.map((goal, i) => (
+              <div key={i} className="flex items-start gap-1.5 text-xs py-0.5">
+                <span className="text-honey-500 mt-0.5">•</span>
+                <span className="text-gray-400">{goal}</span>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function BillRow({ name, dueDate, amount, remaining, onAmountChange, type, isDue, fullAmount }) {
-  const isQuarterlyOrYearly = type === 'quarterly' || type === 'yearly';
-  const isActive = !isQuarterlyOrYearly || isDue || amount > 0;
-
-  // Yellow highlight for quarterly/yearly bills that are due this month
-  const rowClass = isQuarterlyOrYearly && isDue
-    ? 'bg-yellow-900/30 border-yellow-700/50'
-    : 'border-surface-4/30';
-
-  const nameColor = isQuarterlyOrYearly && isDue
-    ? 'text-yellow-300'
-    : isQuarterlyOrYearly && !isDue
-      ? 'text-gray-500'
-      : 'text-gray-300';
-
-  return (
-    <div className={`flex items-center justify-between py-1 text-sm border-b ${rowClass}`}>
-      <div className="flex items-center gap-1 truncate mr-1 w-40">
-        <span className={`truncate text-xs ${nameColor}`}>{name}</span>
-        {isQuarterlyOrYearly && isDue && (
-          <span className="text-yellow-400 text-xs shrink-0">DUE</span>
-        )}
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {dueDate && <span className="text-gray-600 text-xs w-12 text-right">{dueDate}</span>}
-        <input
-          type="number"
-          value={amount}
-          onChange={(e) => onAmountChange(parseFloat(e.target.value) || 0)}
-          className={`w-20 bg-surface-3 border rounded px-1 py-0.5 font-mono text-right text-xs focus:border-honey-500 focus:outline-none ${
-            isQuarterlyOrYearly && isDue
-              ? 'border-yellow-700 text-yellow-300'
-              : isQuarterlyOrYearly && !isDue
-                ? 'border-surface-4 text-gray-500'
-                : 'border-surface-4 text-gray-200'
-          }`}
-          step="0.01"
-        />
-        <span className={`font-mono text-xs w-24 text-right ${remaining >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-          {fmt(remaining)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function WaterfallRow({ label, perCheck, monthly, isFirst, highlight }) {
-  const checkColor = isFirst ? 'text-emerald-400' : highlight ? 'text-yellow-300' : 'text-gray-300';
-  const monthlyColor = isFirst ? 'text-emerald-400' : (monthly >= 0 ? 'text-emerald-400' : 'text-red-400');
-
-  return (
-    <div className={`flex items-center justify-between py-2 border-b ${highlight ? 'border-yellow-700/50 bg-yellow-900/20' : 'border-surface-4/30'}`}>
-      <span className={`text-sm ${highlight ? 'text-yellow-300' : 'text-gray-300'}`}>{label}</span>
-      <div className="flex items-center gap-3">
-        <span className={`font-mono text-xs ${checkColor} w-20 text-right`}>
-          {isFirst ? fmt(perCheck) : perCheck > 0 ? '−' + fmt(perCheck) : fmt(0)}
-        </span>
-        <span className={`font-mono text-xs ${monthlyColor} bg-surface-3 px-2 py-0.5 rounded w-24 text-right`}>
-          {fmt(monthly)}
-        </span>
       </div>
     </div>
   );
