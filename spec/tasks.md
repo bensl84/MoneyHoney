@@ -1,8 +1,21 @@
-# Tasks — Cash Ops Phase 1
+# Tasks — Cash Ops
 
-## Current Objective
+---
 
-Build Phase 1 of Cash Ops Windows app — scaffold Electron shell, port existing React artifact, add persistence, leakage engine, BofA dashboard, payday allocator, statement upload, AI goals engine, and package as Windows installer.
+## Phase 1 Summary
+
+| Metric | Value |
+|---|---|
+| Tasks Completed | 9/9 (T1-T9) |
+| Tests Passing | 47/47 |
+| CTO Audit | Completed — 30 fixes applied |
+| Files Touched | 22 |
+| Status | Pushed to GitHub |
+| Completion Date | March 24, 2026 |
+
+**Phase 1 is COMPLETE.** All 8 original tasks plus a CTO audit hardening pass have shipped. The app is packaged, tested, and running as a daily-use Windows Electron app.
+
+---
 
 ## Status Key
 - [ ] Not started
@@ -12,7 +25,7 @@ Build Phase 1 of Cash Ops Windows app — scaffold Electron shell, port existing
 ---
 
 ## Task 1: Project Scaffold
-**Status**: [ ] Not started
+**Status**: [x] ✅ COMPLETE
 **Agent**: DevOps Automator + Frontend Developer
 **Risk**: Low
 **Files**: `package.json`, `vite.config.js`, `tailwind.config.js`, `electron/main.js`, `electron/preload.js`, `.env.example`, `.gitignore`
@@ -55,7 +68,7 @@ Build Phase 1 of Cash Ops Windows app — scaffold Electron shell, port existing
 ---
 
 ## Task 2: Port Existing Artifact + Tab Navigation
-**Status**: [ ] Not started
+**Status**: [x] ✅ COMPLETE
 **Agent**: Frontend Developer
 **Risk**: Low
 **Files**: `src/App.jsx`, `src/views/*.jsx`, `src/components/*.jsx`
@@ -84,7 +97,7 @@ Build Phase 1 of Cash Ops Windows app — scaffold Electron shell, port existing
 ---
 
 ## Task 3: Leakage Engine + View
-**Status**: [ ] Not started
+**Status**: [x] ✅ COMPLETE
 **Agent**: Backend Architect (engine) + Frontend Developer (view)
 **Risk**: Medium — category mapping must be accurate
 **Files**: `src/engine/leakage.js`, `src/views/Leakage.jsx`, `src/shared/constants.js`
@@ -119,7 +132,7 @@ Build Phase 1 of Cash Ops Windows app — scaffold Electron shell, port existing
 ---
 
 ## Task 4: BofA Paydown Dashboard
-**Status**: [ ] Not started
+**Status**: [x] ✅ COMPLETE
 **Agent**: Frontend Developer + Backend Architect (projections)
 **Risk**: Low
 **Files**: `src/views/BofA.jsx`, `src/engine/leakage.js` (add projection functions)
@@ -147,7 +160,7 @@ Build Phase 1 of Cash Ops Windows app — scaffold Electron shell, port existing
 ---
 
 ## Task 5: Payday Allocator
-**Status**: [ ] Not started
+**Status**: [x] ✅ COMPLETE
 **Agent**: Backend Architect (engine) + Frontend Developer (view)
 **Risk**: Medium — payday detection must be reliable
 **Files**: `src/engine/payday.js`, `src/views/Payday.jsx`
@@ -181,7 +194,7 @@ Build Phase 1 of Cash Ops Windows app — scaffold Electron shell, port existing
 ---
 
 ## Task 6: Statement Upload + Deduplication
-**Status**: [ ] Not started
+**Status**: [x] ✅ COMPLETE
 **Agent**: Backend Architect
 **Risk**: High — deduplication logic is critical, PDF parsing varies by bank
 **Files**: `src/engine/statements.js`, `src/views/Settings.jsx` (upload section)
@@ -215,7 +228,7 @@ Build Phase 1 of Cash Ops Windows app — scaffold Electron shell, port existing
 ---
 
 ## Task 7: AI Goals Engine
-**Status**: [ ] Not started
+**Status**: [x] ✅ COMPLETE
 **Agent**: Backend Architect
 **Risk**: Medium — prompt engineering must produce goal-specific output
 **Files**: `src/api/claude.js`, `src/engine/leakage.js` (context builder)
@@ -251,7 +264,7 @@ Build Phase 1 of Cash Ops Windows app — scaffold Electron shell, port existing
 ---
 
 ## Task 8: Package for Windows
-**Status**: [ ] Not started
+**Status**: [x] ✅ COMPLETE
 **Agent**: DevOps Automator
 **Risk**: Low
 **Files**: `electron-builder.yml`, `package.json` scripts, app icon
@@ -282,12 +295,172 @@ Build Phase 1 of Cash Ops Windows app — scaffold Electron shell, port existing
 
 ---
 
-## Phase 2 — Intelligence Improvements (After Phase 1)
-- 90-day rolling trend charts
-- BofA paydown simulator ("what if I add $X/month?")
-- Merchant-level drilldown
-- Monthly review screen
-- Leaker trend lines over 6 months
+## Task 9: CTO Audit — Hardening Pass
+**Status**: [x] ✅ COMPLETE
+**Agent**: CTO (direct)
+**Risk**: Low — all fixes are additive hardening, no feature changes
+**Files**: 22 files across engine, views, components, electron, and config
+
+**Work**:
+30 issues identified and fixed across 5 categories:
+
+### CORS Proxy (1 fix)
+1. Routed all external API calls (YNAB, Claude) through `electronAPI.fetch()` IPC proxy with URL allowlist — eliminates CORS errors in renderer
+
+### Security Hardening (5 fixes)
+2. electron-store key allowlist — prevents arbitrary read/write from renderer
+3. URL allowlist enforcement in fetch proxy
+4. contextIsolation verified true, nodeIntegration verified false
+5. API keys restricted to main process only
+6. Preload bridge surface area minimized
+
+### Engine Accuracy (6 fixes)
+7. Leakage color thresholds corrected (green/amber/red boundaries)
+8. BofA projection math validated — interest compounding fixed
+9. Payday detection edge cases (holiday shifts, partial deposits)
+10. Baseline computation handles months with zero transactions
+11. Statement deduplication tolerance tuned (date ± 2 days)
+12. Currency milliunit conversion audit — no float errors
+
+### UI Resilience (17 fixes)
+13. ErrorBoundary wraps every view — no white screens
+14. Loading states for all async operations
+15. Empty state handling for every data-driven component
+16. Tab switching doesn't drop in-flight API calls
+17. Token validation on save — immediate feedback
+18. Graceful degradation when YNAB API is unreachable
+19. Graceful degradation when Claude API is unreachable
+20. StatCard handles null/undefined values without crash
+21. CategoryBar handles zero baselines without division error
+22. TransactionRow handles missing payee/category fields
+23. BofA view handles zero balance edge case
+24. Payday view handles no upcoming bills
+25. Settings view validates all inputs before save
+26. Consistent error message styling across all views
+27. Overflow handling for long payee names and category labels
+28. Date formatting consistency (YYYY-MM-DD internal, human-readable display)
+29. Keyboard navigation for tab switching
+
+### Tailwind CJS Fix (1 fix)
+30. Fixed Tailwind config to use CJS module format — resolves PostCSS build warning
+
+**Acceptance**:
+- All 47 tests passing after fixes
+- No regressions in existing functionality
+- Security audit checklist fully green
+- Build completes without warnings
+- Pushed to GitHub
+
+**Blocked by**: Task 1-8 (all features complete)
+**Unblocks**: Phase 1 fully shipped → daily use begins
+
+---
+
+---
+
+## Phase 2: Intelligence
+
+> Make it smarter with more history and deeper analysis. Begin after 1 week of daily use.
+
+### Task 10: Trend Charts
+**Status**: [ ] Not started
+**Agent**: Frontend Developer + Backend Architect
+**Risk**: Medium
+**Files**: TBD
+
+**Work**:
+- 90-day rolling trend charts for each leakage category
+- Visual comparison: this month vs last 3 months
+- Sparklines on Overview tab for quick glance
+
+**Blocked by**: Phase 1 complete + 1 week daily use + 3 months baseline data
+**Unblocks**: T15
+
+---
+
+### Task 11: BofA Paydown Simulator
+**Status**: [ ] Not started
+**Agent**: Backend Architect + Frontend Developer
+**Risk**: Low
+**Files**: TBD
+
+**Work**:
+- "What if I add $X/month?" slider
+- Real-time projection update showing payoff date shift
+- Interest saved calculation
+- Side-by-side comparison of scenarios
+
+**Blocked by**: Phase 1 complete + 1 week daily use
+**Unblocks**: Nothing
+
+---
+
+### Task 12: Merchant Drilldown
+**Status**: [ ] Not started
+**Agent**: Frontend Developer + Backend Architect
+**Risk**: Medium
+**Files**: TBD
+
+**Work**:
+- Click any leakage category to see merchant-level breakdown
+- Top 5 merchants per category with frequency and total
+- Merchant trend over time (increasing/decreasing)
+
+**Blocked by**: Phase 1 complete + 1 week daily use
+**Unblocks**: T14
+
+---
+
+### Task 13: Monthly Review Screen
+**Status**: [ ] Not started
+**Agent**: Frontend Developer + Backend Architect
+**Risk**: Low
+**Files**: TBD
+
+**Work**:
+- This month vs last month comparison across all categories
+- Net change in BofA balance month-over-month
+- AI-generated monthly summary (wins, concerns, recommendations)
+- Replaces any mental math Ben does now
+
+**Blocked by**: Phase 1 complete + 1 week daily use
+**Unblocks**: T15
+
+---
+
+### Task 14: Leaker Trend Lines
+**Status**: [ ] Not started
+**Agent**: Backend Architect + Frontend Developer
+**Risk**: Medium
+**Files**: TBD
+
+**Work**:
+- 6-month directional trend per leakage category
+- Are leakers going up, down, or flat?
+- Correlation with BofA paydown velocity
+- Visual: trend arrows + mini line charts
+
+**Blocked by**: T12, 6 months baseline data
+**Unblocks**: Nothing
+
+---
+
+### Task 15: Email Digest
+**Status**: [ ] Not started
+**Agent**: Backend Architect
+**Risk**: Low
+**Files**: TBD
+
+**Work**:
+- Weekly email summary: leakage snapshot, BofA progress, AI brief
+- Opt-in via Settings
+- Simple HTML email template
+- Scheduled send (Monday morning)
+
+**Blocked by**: T10, T13
+**Unblocks**: Nothing
+
+---
 
 ## Phase 3 — iPhone App (SwiftUI)
 - Separate repo, same APIs

@@ -1,16 +1,25 @@
-# CLAUDE.md — Cash Ops CTO Planning Guide
+# CLAUDE.md — MoneyHoney CTO Planning Guide
+
+> **Phase 1 Status: COMPLETE**
 
 ## Your Role
 
-CTO, principal engineer, and product architect for Cash Ops. You handle planning, architecture, phased decision-making, and code review. Implementation is delegated to agents defined in AGENTS.md.
+CTO, principal engineer, and product architect for MoneyHoney. You handle planning, architecture, phased decision-making, and code review. Implementation is delegated to agents defined in AGENTS.md.
+
+## Current Health
+
+- **Tests**: 47/47 passing (vitest)
+- **Audit Fixes**: 30 fixes shipped across CORS, security, engine accuracy, and UI resilience
+- **Tasks**: All 8 Phase 1 tasks complete
+- **Deployment**: Pushed to GitHub
 
 ## Build Commands
 
 ```bash
 npm install          # Install all dependencies
 npm run dev          # Vite dev server + Electron window (HMR active)
-npm run build        # Vite production build + electron-builder → dist/Cash Ops Setup.exe
-npm run test         # Run vitest test suite
+npm run build        # Vite production build + electron-builder → dist/MoneyHoney Setup.exe
+npm run test         # Run vitest test suite (47 tests)
 npm run lint         # ESLint check
 ```
 
@@ -20,8 +29,8 @@ See `spec/architecture.md` for full structure. Key entry points:
 
 | File | Purpose |
 |---|---|
-| `electron/main.js` | Electron main process — window creation, IPC handlers, store |
-| `electron/preload.js` | Secure bridge — exposes `electronStore`, `electronPDF`, `electronDialog` to renderer |
+| `electron/main.js` | Electron main process — window creation, IPC handlers, store, API proxy |
+| `electron/preload.js` | Secure bridge — exposes `electronStore`, `electronPDF`, `electronDialog`, `electronAPI` to renderer |
 | `src/App.jsx` | React root — tab routing, top-level state |
 | `src/api/ynab.js` | YNAB API client — transaction fetching |
 | `src/api/claude.js` | Claude API client — AI analysis with goal context injection |
@@ -38,8 +47,10 @@ See `spec/architecture.md` for full structure. Key entry points:
 - **IDs**: All YNAB account/category IDs in `src/shared/constants.js`. Never hardcoded in components or engine.
 - **Errors**: Every API call and IPC channel wrapped in try/catch with user-facing messages. No silent failures.
 - **Security**: contextIsolation true, nodeIntegration false. API keys never in renderer. Main process only.
-- **API Proxy**: All external API calls (YNAB, Claude) go through `electronAPI.fetch()` IPC proxy in main process to avoid CORS. URL allowlist enforced.
-- **Store Security**: electron-store keys restricted to allowlist. No arbitrary read/write.
+- **API Proxy**: All external API calls (YNAB, Claude) go through `electronAPI.fetch()` IPC proxy (`api:fetch` channel) in main process to avoid CORS. URL allowlist enforced — only approved domains are permitted.
+- **Store Security**: electron-store keys restricted to explicit allowlist in main process. No arbitrary read/write. New keys require allowlist update.
+- **Payee Matching**: Word-boundary regex (`\b`) for all payee matching. Never use `includes()` — it causes false positives.
+- **Refund Filtering**: Baseline spending calculations filter out refunds/credits to avoid skewing averages.
 
 ## The Two Goals (Always In Context)
 

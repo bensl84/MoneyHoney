@@ -1,4 +1,4 @@
-# Test Plan — Cash Ops
+# Test Plan — MoneyHoney
 
 ## Strategy
 
@@ -6,6 +6,7 @@ Engine modules (`src/engine/*`) are pure functions — fully unit testable witho
 
 **Framework**: Vitest
 **Run**: `npm run test`
+**Current Status**: 47 tests passing
 
 ---
 
@@ -130,6 +131,19 @@ describe('normalizePayee')
 
 ---
 
+## CTO Audit Regression Tests
+
+The following edge cases were identified and fixed during the Phase 1 CTO audit. These must remain covered to prevent regressions:
+
+- **Refund filtering**: Refund transactions (positive amounts) are correctly excluded from leakage calculations
+- **Word-boundary matching**: Category keyword matching uses word boundaries to avoid false positives (e.g., "bar" should not match "Barbershop")
+- **NaN guards**: All arithmetic paths guard against NaN propagation from missing or undefined values
+- **Infinity arithmetic**: Division-by-zero cases (e.g., zero baseline) return safe fallback values instead of Infinity
+- **BofA payment direction**: BofA payments are correctly identified as outflows (debt reduction), not inflows
+- **Dice coefficient multiset**: Fuzzy payee matching uses proper multiset Dice coefficient for accurate similarity scoring
+
+---
+
 ## Integration Tests
 
 ### YNAB API Client (`tests/api/ynab.test.js`)
@@ -141,6 +155,8 @@ describe('normalizePayee')
 ---
 
 ## Manual Verification Checklist
+
+> **Note**: All manual verification items below should be re-checked after Phase 1 completion to confirm no regressions from the CTO audit fixes.
 
 ### First Run
 - [ ] App opens to Settings tab (no token saved)

@@ -1,4 +1,4 @@
-# Backlog — Cash Ops
+# Backlog — MoneyHoney
 
 ## Priority Labels
 - **P0**: Blocks daily use
@@ -8,17 +8,24 @@
 
 ---
 
+## Done (Phase 1)
+
+- [x] **Loading states**: Every view shows a spinner or skeleton while data loads. No blank screens. *(Fixed in CTO audit)*
+- [x] **Error messages**: Every error tells the user what happened and what to do. No technical jargon. *(Fixed in CTO audit)*
+
+---
+
 ## Bugs
-*(None yet — Phase 1 not started)*
+*(None open)*
 
 ---
 
 ## Improvements (P1)
 
 - [ ] **Graceful offline mode**: Cache last successful YNAB fetch. If API unavailable, show cached data with "last updated" timestamp.
-- [ ] **Loading states**: Every view should show a spinner or skeleton while data loads. No blank screens.
-- [ ] **Error messages**: Every error should tell the user what happened and what to do. No technical jargon.
 - [ ] **Keyboard navigation**: Tab/Enter should work for all primary actions. Power user efficiency.
+- [ ] **App icon**: Currently uses default Electron icon. Add branded MoneyHoney icon for taskbar, installer, and window title.
+- [ ] **Code signing**: Add code signing for Windows installer to avoid SmartScreen warnings.
 
 ---
 
@@ -32,6 +39,8 @@
 - [ ] **Weekly email summary**: Optional email digest with key stats (requires email integration)
 - [ ] **Multiple debt targets**: Support tracking more than just BofA (future credit cards, loans)
 - [ ] **CSV export**: Export transaction data and reports for spreadsheet analysis
+- [ ] **Transaction search/filter**: Add search and filtering in the Transactions view (by payee, amount, date range, category)
+- [ ] **Data export (CSV)**: Export transactions from any view to CSV for external analysis
 
 ---
 

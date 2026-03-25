@@ -1,4 +1,4 @@
-# Engineering Decisions — Cash Ops
+# Engineering Decisions — MoneyHoney
 
 All decisions logged in ADR (Architecture Decision Record) format.
 
@@ -24,7 +24,7 @@ All decisions logged in ADR (Architecture Decision Record) format.
 **Date**: 2026-03-23
 **Status**: Accepted
 **Context**: YNAB has built-in budgeting (envelopes) but Ben doesn't want to maintain them. Question: should the app integrate deeply with YNAB budgeting or treat it as a transaction source only?
-**Decision**: Use YNAB API for transaction data only. All budgeting/analysis logic lives in Cash Ops.
+**Decision**: Use YNAB API for transaction data only. All budgeting/analysis logic lives in MoneyHoney.
 **Consequences**:
 - (+) Cleaner mental model — one tool for data, one tool for analysis
 - (+) No YNAB maintenance burden
@@ -130,3 +130,73 @@ All decisions logged in ADR (Architecture Decision Record) format.
 - (+) No .env file management for non-developer user flow
 - (-) Key is in plaintext JSON (same as .env — acceptable for personal use)
 - Key NEVER sent to renderer — all Claude API calls made from main process or via secure IPC
+
+---
+
+## ADR-010: IPC API Proxy for CORS Bypass
+
+**Date**: 2026-03-24
+**Status**: Accepted
+**Context**: Browser CORS policy blocks renderer-process `fetch()` calls to YNAB (`api.ynab.com`) and Claude (`api.anthropic.com`) APIs. The renderer runs in a Chromium context that enforces same-origin restrictions.
+**Decision**: Route all external API calls through the Electron main process via an `api:fetch` IPC channel. The renderer calls `electronAPI.fetch(url, options)`, which invokes Node.js `fetch()` in the main process (not subject to CORS).
+**Consequences**:
+- (+) No CORS issues — Node.js fetch has no origin restrictions
+- (+) URL allowlist enforced in main process prevents SSRF attacks
+- (+) All outbound traffic is auditable in a single handler
+- (-) Adds slight IPC latency per request (negligible — single-digit ms)
+- (-) Must update allowlist when adding new external API integrations
+
+---
+
+## ADR-011: Store Key Allowlist
+
+**Date**: 2026-03-24
+**Status**: Accepted
+**Context**: The `store:get` and `store:set` IPC channels provide read/write access to electron-store. Without restrictions, compromised renderer code could read or write arbitrary keys, potentially exfiltrating tokens or corrupting app state.
+**Decision**: Restrict `store:get` and `store:set` to an explicit allowlist of keys: `ynabToken`, `anthropicApiKey`, `ynabBudgetId`, `goals`, `baseline`, `statementHistory`, `cache`. Reject any request with a key not on the list.
+**Consequences**:
+- (+) Prevents arbitrary data read/write through IPC bridge
+- (+) Limits blast radius of any renderer-side vulnerability
+- (-) Must update allowlist when adding new settings or stored data
+- (-) Slightly more friction during development (intentional — security tradeoff)
+
+---
+
+## ADR-012: Tailwind CJS Config
+
+**Date**: 2026-03-24
+**Status**: Accepted
+**Context**: `tailwind.config.js` initially used `export default` (ESM syntax). When Vite's PostCSS pipeline loaded the config via `require()` (CJS), the export silently failed. Tailwind saw no content paths, purged all utilities, and produced an empty stylesheet. This manifested as a "missing content" warning with no styles applied.
+**Decision**: Use `module.exports` (CJS) in `tailwind.config.js` with absolute paths via `path.join(__dirname, ...)` for the content array.
+**Consequences**:
+- (+) Config always loads correctly regardless of Vite's CWD or module resolution mode
+- (+) Eliminates the silent "missing content" failure
+- (+) Absolute paths prevent path resolution issues when running from different directories
+- (-) File uses CJS in an otherwise ESM project (acceptable — Tailwind/PostCSS config is CJS-native)
+
+---
+
+## ADR-013: Refund Filtering in Leakage
+
+**Date**: 2026-03-24
+**Status**: Accepted
+**Context**: YNAB records refunds as positive-amount transactions in the same category as the original spend. When computing category baselines, these refunds reduced the average, making leakage appear lower than actual spending. For example, a $200 dining month with a $50 refund would baseline at $150, masking true spending behavior.
+**Decision**: Skip transactions with `amount >= 0` (refunds and zero-dollar entries) when computing baselines in `computeBaseline()`.
+**Consequences**:
+- (+) Baselines now reflect actual outgoing spending only
+- (+) Leakage detection is more accurate — no false "under budget" signals from refunds
+- (-) Legitimate credits (e.g., rewards applied to statement) also excluded (acceptable — rare and small)
+
+---
+
+## ADR-014: Word-Boundary Payee Matching
+
+**Date**: 2026-03-24
+**Status**: Accepted
+**Context**: Category assignment used `payee.includes(pattern)` to match transaction payees against known patterns. This caused false positives: "bar" matched "barbershop", "target" matched "target practice", etc. Misclassified transactions corrupted leakage tracking.
+**Decision**: Use word-boundary regex (`new RegExp('\\b' + pattern + '\\b', 'i')`) for payee pattern matching instead of simple `includes()`.
+**Consequences**:
+- (+) Eliminates false-positive category assignments
+- (+) "bar" matches "The Bar" but not "barbershop"
+- (-) Slightly more complex matching logic
+- (-) Edge cases with hyphenated or concatenated payee names may need manual pattern tuning

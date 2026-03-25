@@ -4,9 +4,9 @@
 
 | Field | Value |
 |---|---|
-| **App Name** | Cash Ops |
+| **App Name** | MoneyHoney |
 | **App Type** | Windows desktop app (Electron) |
-| **Stage** | Concept → Phase 1 build |
+| **Stage** | Phase 1 Complete — daily use validation |
 | **Business Priority** | High — daily-use personal tool |
 | **Single User** | Ben Leonard |
 

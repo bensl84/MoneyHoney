@@ -1,4 +1,4 @@
-# AGENTS.md — Cash Ops Agent Delegation Hierarchy
+# AGENTS.md — MoneyHoney Agent Delegation Hierarchy
 
 ## Archetype
 
@@ -69,6 +69,9 @@ Pipeline Manager (Orchestrator)
 - Dates always as `YYYY-MM-DD` strings until display layer
 - Error handling: every API call and IPC channel has try/catch with user-facing error message
 - No `console.log` in production — use a simple logger utility
+- **API Proxy**: All external API calls (YNAB, Claude) must go through the `api:fetch` IPC proxy in main process. Never call external URLs from the renderer directly.
+- **Payee Matching**: Use word-boundary regex (`\b`) for payee matching in engine modules. Never use `includes()` for payee string matching — it produces false positives.
+- **Refund Filtering**: Baseline calculations must filter out refunds/credits to avoid skewing spending averages.
 
 ### Security Constraints
 - `contextIsolation: true`, `nodeIntegration: false` — always
@@ -76,6 +79,23 @@ Pipeline Manager (Orchestrator)
 - Claude API key: environment variable, injected at build time, **never in renderer process**
 - All Node.js work (PDF parse, file system) in main process via IPC only
 - Renderer communicates through preload bridge exclusively
+- **API Proxy URL Allowlist**: Only URLs matching the allowlist in main process may be fetched via `api:fetch`. All others are rejected.
+- **Store Key Allowlist**: electron-store access is restricted to an explicit key allowlist. Arbitrary key read/write is blocked.
+- **PDF Extension Validation**: File picker for statement uploads validates `.pdf` extension before processing. No other file types accepted.
+
+---
+
+## Phase 1 Completion Notes
+
+**Status**: All 8 tasks complete. Phase 1 is shipped.
+
+- **Test Suite**: 47 tests passing (vitest), covering engine modules, API clients, IPC handlers, and UI integration.
+- **CTO Audit**: Full audit performed with **30 fixes** shipped across:
+  - **CORS** — All external API calls routed through `api:fetch` IPC proxy; no direct renderer-to-API calls remain.
+  - **Security** — URL allowlist on API proxy, store key allowlist, PDF extension validation, no API keys in renderer.
+  - **Engine Accuracy** — Word-boundary regex for payee matching, refund filtering in baseline calculations, correct milliunit/cent conversions.
+  - **UI Resilience** — Graceful error states for all views, loading indicators, fallback handling for missing data.
+- **Deployed**: Pushed to GitHub. Ready for Phase 2 planning.
 
 ---
 
@@ -96,7 +116,8 @@ Pipeline Manager (Orchestrator)
 - **Engine purity**: Engine modules take data in, return data out. No side effects. Testable in isolation.
 - **API clients**: `src/api/ynab.js` and `src/api/claude.js` handle all external calls. Retry logic for network errors (max 3, exponential backoff).
 - **IPC channels**: Defined in `electron/main.js`, exposed through `electron/preload.js`. Channels:
-  - `store:get` / `store:set` — electron-store read/write
+  - `store:get` / `store:set` — electron-store read/write (key allowlist enforced)
+  - `api:fetch` — IPC proxy for all external API calls (URL allowlist enforced)
   - `pdf:parse` — PDF statement parsing
   - `dialog:openFile` — native file picker
 - **Deduplication**: Match transactions on `date ± 2 days` + `amount` + `normalized payee`. This is critical — never double-count.
@@ -109,7 +130,7 @@ Pipeline Manager (Orchestrator)
 - **Owns**: Build configuration, packaging, CI
 - **Scaffold**: Vite 5 + React 18 + Electron 28+
 - **Build**: `npm run dev` = Vite dev server + Electron loading localhost. `npm run build` = Vite build + electron-builder NSIS.
-- **Packaging**: electron-builder targeting Windows NSIS installer. Output: `dist/Cash Ops Setup.exe`
+- **Packaging**: electron-builder targeting Windows NSIS installer. Output: `dist/MoneyHoney Setup.exe`
 - **No dev tools in production**: `mainWindow.webContents.openDevTools()` only in dev mode
 
 ### Code Reviewer
@@ -149,6 +170,10 @@ Pipeline Manager (Orchestrator)
 - **Do NOT** add a database — electron-store is sufficient for Phase 1
 - **Do NOT** add user auth — single user, local app
 - **Do NOT** refactor working code while implementing a task — stay focused
+- **Do NOT** bypass the `api:fetch` IPC proxy for external API calls — all YNAB/Claude requests must go through main process
+- **Do NOT** add new electron-store keys without updating the key allowlist in main process
+- **Do NOT** use `includes()` for payee matching — use word-boundary regex to avoid false positives
+- **Do NOT** mix ESM and CJS in config files — pick one module format per file and stick with it
 
 ---
 
@@ -166,7 +191,7 @@ When a task completes:
 ```
 Read AGENTS.md and all files in /spec.
 
-You are the DevOps Automator + Frontend Developer for Cash Ops.
+You are the DevOps Automator + Frontend Developer for MoneyHoney.
 
 Start with Task 1 from spec/tasks.md: Project Scaffold.
 

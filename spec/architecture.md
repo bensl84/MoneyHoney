@@ -1,4 +1,4 @@
-# Architecture — Cash Ops
+# Architecture — MoneyHoney
 
 ## Stack
 
@@ -22,7 +22,7 @@
 ## Project Structure
 
 ```
-cash-ops-app/
+moneyhoney-app/
 ├── electron/
 │   ├── main.js              # Electron main process
 │   │   ├── Window creation (1200x800, no resize in Phase 1)
@@ -195,6 +195,40 @@ PDF Statement Flow:
 | `store:set` | renderer → main | `{ key: string, value: any }` | `{ success: boolean }` |
 | `pdf:parse` | renderer → main | `{ filePath: string }` | `{ transactions: ParsedTransaction[] }` |
 | `dialog:openFile` | renderer → main | `{ filters: FileFilter[] }` | `{ filePath: string \| null }` |
+| `api:fetch` | renderer → main | `{ url: string, options: RequestInit }` | `{ data: any }` |
+
+### IPC API Proxy
+
+All external API calls (YNAB, Claude) are routed through the Electron main process via the `api:fetch` IPC channel. The renderer never makes direct network requests to external services.
+
+**Why**: Browser CORS policy blocks renderer-process `fetch()` calls to `api.ynab.com` and `api.anthropic.com`. Routing through the main process (Node.js) bypasses CORS entirely since Node.js `fetch()` is not subject to browser origin restrictions.
+
+**Flow**: `renderer fetch() → preload electronAPI.fetch() → IPC api:fetch → main process net.fetch() → external API → response back through IPC`
+
+**URL Allowlist** (enforced in main process before any request is made):
+
+| Allowed Origin | Purpose |
+|---|---|
+| `https://api.ynab.com` | YNAB transaction and account data |
+| `https://api.anthropic.com` | Claude AI analysis and recommendations |
+
+Any request to a URL not on this allowlist is rejected with an error. This prevents SSRF (Server-Side Request Forgery) attacks where malicious renderer code could proxy requests to arbitrary endpoints.
+
+### Store Key Allowlist
+
+The `store:get` and `store:set` IPC handlers restrict access to the following keys only:
+
+| Key | Type | Purpose |
+|---|---|---|
+| `ynabToken` | string | YNAB personal access token |
+| `anthropicApiKey` | string | Claude API key |
+| `ynabBudgetId` | string | Cached budget ID |
+| `goals` | object | BofA target, leakage limits |
+| `baseline` | object | Category averages for leakage detection |
+| `statementHistory` | array | Uploaded PDF statement records |
+| `cache` | object | Cached transactions and fetch date |
+
+Any `store:get` or `store:set` call with a key not on this list is rejected. This prevents arbitrary data read/write through the IPC bridge.
 
 ---
 
@@ -255,9 +289,12 @@ interface AllocationItem {
 | YNAB token exposure | Stored in electron-store (OS user data dir). Never in env file or source. |
 | Claude API key exposure | Environment variable at build time. Never in renderer process. |
 | Node.js in renderer | `nodeIntegration: false`, `contextIsolation: true`. Preload bridge only. |
-| PDF file access | Native dialog for file selection. pdf-parse runs in main process only. |
+| PDF file access | Native dialog for file selection. pdf-parse runs in main process only. PDF extension validated before parsing. |
 | Data at rest | electron-store JSON file. Not encrypted (acceptable: personal machine, personal data). |
 | Network | HTTPS only for YNAB and Anthropic APIs. No other outbound connections. |
+| URL allowlist | `api:fetch` IPC proxy rejects requests to any URL not on the allowlist (`api.ynab.com`, `api.anthropic.com`). Prevents SSRF. |
+| Store key allowlist | `store:get`/`store:set` restricted to known keys only (`ynabToken`, `anthropicApiKey`, `ynabBudgetId`, `goals`, `baseline`, `statementHistory`, `cache`). Prevents arbitrary data access. |
+| PDF extension validation | File picker and `pdf:parse` handler validate `.pdf` extension before processing. Rejects non-PDF files. |
 
 ---
 
@@ -267,7 +304,7 @@ interface AllocationItem {
 |---|---|
 | Builder | electron-builder |
 | Target | Windows NSIS installer |
-| Output | `dist/Cash Ops Setup.exe` |
+| Output | `dist/MoneyHoney Setup.exe` |
 | App size | ~150MB (Electron + Chromium overhead) |
 | Auto-update | Not in Phase 1 |
 | Code signing | Not in Phase 1 |
