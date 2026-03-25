@@ -18,7 +18,7 @@ import { detectPayday, getUpcomingBills } from './engine/payday';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   // Config
@@ -180,11 +180,12 @@ export default function App() {
   }, [ynabToken, budgetId, anthropicKey, goals, baselines]);
 
   // Load cached data instantly on startup, then fetch fresh in background
+  const [initDone, setInitDone] = useState(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally excludes refreshData to avoid infinite loop
   useEffect(() => {
-    if (!ynabToken || loading) return;
-    if (transactions.length > 0) return; // Already loaded
+    if (!ynabToken || initDone) return;
 
+    setInitDone(true);
     (async () => {
       // Step 1: Load cache instantly so the UI isn't empty
       if (window.electronStore) {
@@ -227,7 +228,7 @@ export default function App() {
       // Step 2: Fetch fresh data (in background if cache was loaded)
       refreshData(ynabToken);
     })();
-  }, [ynabToken, loading]);
+  }, [ynabToken, initDone]);
 
   const handleSaveSettings = async (newToken, newApiKey, newGoals) => {
     if (window.electronStore) {
