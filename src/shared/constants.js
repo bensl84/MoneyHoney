@@ -83,7 +83,7 @@ export const BASELINE_MONTHS = 3;
 // Tab definitions
 export const TABS = [
   { id: 'overview', label: 'Overview', icon: '📊' },
-  { id: 'budget', label: 'Budget', icon: '📅' },
+  { id: 'budget', label: "Nikki's View", icon: '💅' },
   { id: 'leakage', label: 'Leakage', icon: '🚰' },
   { id: 'bofa', label: 'BofA', icon: '💳' },
   { id: 'payday', label: 'Payday', icon: '💰' },
