@@ -9,6 +9,7 @@ import Payday from './views/Payday';
 import Transactions from './views/Transactions';
 import Settings from './views/Settings';
 import Budget from './views/Budget';
+import BensView from './views/BensView';
 import { fetchTransactions, fetchBudgetId, fetchScheduledTransactions, fetchAccounts } from './api/ynab';
 import { buildGoalContext, generateBrief } from './api/claude';
 import { calculateMTD, buildMTDSummary, get90DaysAgo, categorizeTransaction } from './engine/transactions';
@@ -213,7 +214,7 @@ export default function App() {
 
   // Render current view
   const renderView = () => {
-    if (!ynabToken && activeTab !== 'settings' && activeTab !== 'budget') {
+    if (!ynabToken && activeTab !== 'settings' && activeTab !== 'budget' && activeTab !== 'bensview') {
       return (
         <div className="flex flex-col items-center justify-center h-full gap-4">
           <div className="text-5xl">🍯</div>
@@ -232,6 +233,8 @@ export default function App() {
     switch (activeTab) {
       case 'budget':
         return <Budget />;
+      case 'bensview':
+        return <BensView />;
       case 'overview':
         return (
           <Overview
