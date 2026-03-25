@@ -21,9 +21,9 @@ export default function Overview({ mtd, leakageReport, bofaData, aiBrief, briefL
         </div>
         <button
           onClick={onRefresh}
-          className="px-4 py-2 bg-surface-2 text-gray-300 rounded-lg hover:bg-surface-3 transition-colors text-sm border border-surface-3"
+          className="px-4 py-2 bg-honey-600 text-white rounded-lg hover:bg-honey-500 transition-colors text-sm font-medium"
         >
-          Refresh
+          🔄 Refresh Data
         </button>
       </div>
 

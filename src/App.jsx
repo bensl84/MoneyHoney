@@ -285,7 +285,7 @@ export default function App() {
             bofaData={bofaData}
             aiBrief={aiBrief}
             briefLoading={briefLoading}
-            onRefresh={refreshData}
+            onRefresh={() => refreshData(ynabToken)}
           />
         );
       case 'leakage':
